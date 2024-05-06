@@ -50,7 +50,10 @@ ESP8266WebServer server(80);
    connected to this access point to see it.
 */
 void handleRoot() {
-  server.send(200, "text/html", "<h1>You are connected</h1>");
+  Serial.println(server.arg("SSID"));
+  Serial.println(server.arg("PASSWORD"));
+   Serial.println(server.arg("WIFIID"));
+   server.send(200, "text/html", "ok");
 }
 
 void setup() {
@@ -64,7 +67,7 @@ void setup() {
   IPAddress myIP = WiFi.softAPIP();
   Serial.print("AP IP address: ");
   Serial.println(myIP);
-  server.on("/", handleRoot);
+  server.on("/test", handleRoot);
   server.begin();
   Serial.println("HTTP server started");
 }
