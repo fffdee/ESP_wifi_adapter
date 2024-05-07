@@ -1,35 +1,26 @@
-/*
-   Copyright (c) 2015, Majenko Technologies
-   All rights reserved.
+/************************************************************************************************************************
+ * 
+ mmmmmm                           mmmm     mmmm   
+ ##""""##                       ##""""#   ##""##  
+ ##    ##   m#####m  ##m####m  ##        ##    ## 
+ #######    " mmm##  ##"   ##  ##  mmmm  ##    ## 
+ ##    ##  m##"""##  ##    ##  ##  ""##  ##    ## 
+ ##mmmm##  ##mmm###  ##    ##   ##mmm##   ##mm##  
+ """""""    """" ""  ""    ""     """"     """"   
 
-   Redistribution and use in source and binary forms, with or without modification,
-   are permitted provided that the following conditions are met:
 
- * * Redistributions of source code must retain the above copyright notice, this
-     list of conditions and the following disclaimer.
 
- * * Redistributions in binary form must reproduce the above copyright notice, this
-     list of conditions and the following disclaimer in the documentation and/or
-     other materials provided with the distribution.
-
- * * Neither the name of Majenko Technologies nor the names of its
-     contributors may be used to endorse or promote products derived from
-     this software without specific prior written permission.
-
-   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-   ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-   WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-   DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
-   ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-   (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-   LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-   ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
-
-/* Create a WiFi access point and provide a web server on it. */
-
+                                                                          mmmm                                                    
+                                                                         ##"""     ##                                             
+  m####m   ##m###m    m####m   ##m####m            mm#####m   m####m   #######   #######  ##      ##  m#####m   ##m####   m####m  
+ ##"  "##  ##"  "##  ##mmmm##  ##"   ##            ##mmmm "  ##"  "##    ##        ##     "#  ##  #"  " mmm##   ##"      ##mmmm## 
+ ##    ##  ##    ##  ##""""""  ##    ##             """"##m  ##    ##    ##        ##      ##m##m##  m##"""##   ##       ##"""""" 
+ "##mm##"  ###mm##"  "##mmmm#  ##    ##            #mmmmm##  "##mm##"    ##        ##mmm   "##  ##"  ##mmm###   ##       "##mmmm# 
+   """"    ## """      """""   ""    ""             """"""     """"      ""         """"    ""  ""    """" ""   ""         """""  
+           ##                                                                                                                     
+* 
+ *************************************************************************************************************************/
+ 
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
@@ -40,9 +31,67 @@
 #define APPSK  "88888888"
 #endif
 
+#define CONST_SETTING_COUNT 5
 /* Set these to your desired credentials. */
 const char *ssid = APSSID;
 const char *password = APPSK;
+
+typedef struct
+{
+   uint8_t wifi_mode;                             
+   uint8_t factory_Flag;
+ 
+   uint16_t max_eeprom_count;                           //Count of eeprom bit be used
+   uint8_t max_wifi_count; 
+   uint8_t ssid_len[max_wifi_count];                                    //The lenth of ssid and password
+   uint8_t password_len[max_wifi_count];                            //Max count of wifi to connected
+   uint8_t ssid_address[max_wifi_count];
+   uint8_t password_address[max_wifi_count];
+   unsigned char *ssid[max_wifi_count]
+   unsigned char *password[max_wifi_count]
+  
+}Wifi_Efu;
+
+void Wifi_Efu_factory_Init(void)
+{
+    Wifi_Efu wifi_efu;
+   
+    wifi_efu.ssid_len = 25;
+    wifi_efu.password_len  = 25;
+    wifi_efu.max_wifi_count = 3;
+    for(int i = 0; i<max_wifi_count;i++){
+        wifi_efu.ssid_address[i] = wifi_efu.ssid_len*i+10;                                                       //the ssid data in eeprom: |ssid_adress1:ssidlen|ssid_adress2:ssidlen|ssid_adress3:ssidlen|
+        wifi_efu.password_address[i] = wifi_efu.ssid_len*wifi_efu.max_wifi_count+ wifi_efu.password_len*i+10;    //  |password_adress1:passwordlen|password_adress2:passwordlen|password_adress3:passwordlen|
+    }
+    wifi_efu.wifi_mode = 0;
+    
+    wifi_efu.max_wifi_count = (wifi_efu.ssid_len+wifi_efu.password_len)*wifi_efu.max_wifi_count+10;
+   // wifi_efu.factory_Flag = 1;
+  
+}
+
+void Wifi_Efu_Init(void)
+{
+    Wifi_Efu wifi_efu;
+    //E-Fuse Setting
+    wifi_efu.factory_Flag = EEPROM.read(0);
+    wifi_efu.wifi_mode =EEPROM.read(1);
+    wifi_efu.max_wifi_count = EEPROM.read(2);
+    //Flexible Setting  
+    for(int i = 0; i<wifi_efu.max_wifi_count; i++){
+        wifi_efu.ssid_len[i]= EEPROM.read(CONST_SETTING_COUNT+i);
+        wifi_efu.password_len[i]  = EEPROM.read(CONST_SETTING_COUNT+wifi_efu.max_wifi_count+i);
+        if(i==0) wifi_efu.ssid_address[i] =  EEPROM.read(wifi_efu.ssid_len[i]+(CONST_SETTING_COUNT+2*wifi_efu.max_wifi_count));
+        else wifi_efu.ssid_address[i] = EEPROM.read(wifi_efu.ssid_address[i-1]+wifi_efu.ssid_len[i-1]);                                                                                                                       
+    }
+    for(int i = 0; i<wifi_efu.max_wifi_count; i++){
+         if(i==0) wifi_efu.password_address[i] =  EEPROM.read(wifi_efu.password_len[wifi_efu.max_wifi_count-1]+wifi_efu.ssid_address[wifi_efu.max_wifi_count-1]);
+        else wifi_efu.password_address[i] = EEPROM.read(wifi_efu.password_address[i-1]+wifi_efu.password_len[i-1]);
+    }
+    wifi_efu.max_wifi_count = wifi_efu.password_address[wifi_efu.max_wifi_count-1]+wifi_efu.password_len[wifi_efu.max_wifi_count-1];
+
+}
+
 
 ESP8266WebServer server(80);
 
@@ -52,14 +101,32 @@ ESP8266WebServer server(80);
 void handleRoot() {
   Serial.println(server.arg("SSID"));
   Serial.println(server.arg("PASSWORD"));
-   Serial.println(server.arg("WIFIID"));
+  Serial.println(server.arg("WIFIID"));
+   if(server.arg("WIFIID")!=NULL){
+    
+   }else if(server.arg("SSID") != NULL){
+    
+   }else if(server.arg("PASSWORD") != NULL){
+    
+   }else if(server.arg("OVER") != NULL){
+    
+   }
+   
    server.send(200, "text/html", "ok");
 }
 
 void setup() {
-  delay(1000);
+
   Serial.begin(115200);
-  Serial.println();
+  
+  EEPROM.begin(512);
+  if(EEPROM.read(0)<1){
+       Wifi_Efu_factory_Init();
+  }else{
+       Wifi_Efu_Init();
+  }
+
+  Serial.println("EEPROM is Ready! Count of %d",COUNT_OF_EEPROM_BIT);
   Serial.print("Configuring access point...");
   /* You can remove the password parameter if you want the AP to be open. */
   WiFi.softAP(ssid, password);
